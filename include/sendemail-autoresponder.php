@@ -16,6 +16,7 @@ $message_success = 'We have <strong>successfully</strong> received your Message 
 $recaptcha_secret = ''; // Your reCaptcha Secret
 
 $mail = new PHPMailer();
+$autoresponder = new PHPMailer();
 
 // If you intend you use SMTP, add your SMTP Code after this Line
 
@@ -43,6 +44,12 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 			}
 			$mail->Subject = $subject;
 
+			// AutoResponder Settings
+			$autoresponder->SetFrom( $toemails[0]['email'] , $toemails[0]['name'] );
+			$autoresponder->AddReplyTo( $toemails[0]['email'] , $toemails[0]['name'] );
+			$autoresponder->AddAddress( $email , $name );
+			$autoresponder->Subject = 'We\'ve received your Email';
+
 			$name = isset($name) ? "Name: $name<br><br>" : '';
 			$email = isset($email) ? "Email: $email<br><br>" : '';
 			$phone = isset($phone) ? "Phone: $phone<br><br>" : '';
@@ -52,6 +59,9 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 			$referrer = $_SERVER['HTTP_REFERER'] ? '<br><br><br>This Form was submitted from: ' . $_SERVER['HTTP_REFERER'] : '';
 
 			$body = "$name $email $phone $service $message $referrer";
+
+			// AutoResponder Message
+			$ar_body = "Thank you for contacting us. We will reply within 24 hours.<br><br>Regards,<br>Your Company.";
 
 			// Runs only when File Field is present in the Contact Form
 			if ( isset( $_FILES['template-contactform-file'] ) && $_FILES['template-contactform-file']['error'] == UPLOAD_ERR_OK ) {
@@ -73,9 +83,11 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 			}
 
 			$mail->MsgHTML( $body );
+			$autoresponder->MsgHTML( $ar_body );
 			$sendEmail = $mail->Send();
 
 			if( $sendEmail == true ):
+				$send_arEmail = $autoresponder->Send();
 				echo '{ "alert": "success", "message": "' . $message_success . '" }';
 			else:
 				echo '{ "alert": "error", "message": "Email <strong>could not</strong> be sent due to some Unexpected Error. Please Try Again later.<br /><br /><strong>Reason:</strong><br />' . $mail->ErrorInfo . '" }';

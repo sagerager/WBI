@@ -2,6 +2,9 @@
 
 require_once('phpmailer/PHPMailerAutoload.php');
 
+$apiKey = ''; // Your MailChimp API Key
+$listId = ''; // Your MailChimp List ID
+
 $toemails = array();
 
 $toemails[] = array(
@@ -21,18 +24,20 @@ $mail = new PHPMailer();
 
 
 if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
-	if( $_POST['template-contactform-email'] != '' ) {
+	if( $_POST['quick-contact-form-email'] != '' ) {
 
-		$name = isset( $_POST['template-contactform-name'] ) ? $_POST['template-contactform-name'] : '';
-		$email = isset( $_POST['template-contactform-email'] ) ? $_POST['template-contactform-email'] : '';
-		$phone = isset( $_POST['template-contactform-phone'] ) ? $_POST['template-contactform-phone'] : '';
-		$service = isset( $_POST['template-contactform-service'] ) ? $_POST['template-contactform-service'] : '';
-		$subject = isset( $_POST['template-contactform-subject'] ) ? $_POST['template-contactform-subject'] : '';
-		$message = isset( $_POST['template-contactform-message'] ) ? $_POST['template-contactform-message'] : '';
+		$name = $_POST['quick-contact-form-name'];
+		$email = $_POST['quick-contact-form-email'];
+		$subscribe_email = $email;
+		$message = $_POST['quick-contact-form-message'];
 
-		$subject = isset($subject) ? $subject : 'New Message From Contact Form';
+		$subject = 'New Message From Quick Contact Form';
 
-		$botcheck = $_POST['template-contactform-botcheck'];
+		$botcheck = $_POST['quick-contact-form-botcheck'];
+
+		if( isset( $_GET['list'] ) AND $_GET['list'] != '' ) {
+			$listId = $_GET['list'];
+		}
 
 		if( $botcheck == '' ) {
 
@@ -45,19 +50,11 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 
 			$name = isset($name) ? "Name: $name<br><br>" : '';
 			$email = isset($email) ? "Email: $email<br><br>" : '';
-			$phone = isset($phone) ? "Phone: $phone<br><br>" : '';
-			$service = isset($service) ? "Service: $service<br><br>" : '';
 			$message = isset($message) ? "Message: $message<br><br>" : '';
 
 			$referrer = $_SERVER['HTTP_REFERER'] ? '<br><br><br>This Form was submitted from: ' . $_SERVER['HTTP_REFERER'] : '';
 
-			$body = "$name $email $phone $service $message $referrer";
-
-			// Runs only when File Field is present in the Contact Form
-			if ( isset( $_FILES['template-contactform-file'] ) && $_FILES['template-contactform-file']['error'] == UPLOAD_ERR_OK ) {
-				$mail->IsHTML(true);
-				$mail->AddAttachment( $_FILES['template-contactform-file']['tmp_name'], $_FILES['template-contactform-file']['name'] );
-			}
+			$body = "$name $email $message $referrer";
 
 			// Runs only when reCaptcha is present in the Contact Form
 			if( isset( $_POST['g-recaptcha-response'] ) ) {
@@ -76,6 +73,38 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 			$sendEmail = $mail->Send();
 
 			if( $sendEmail == true ):
+
+				$datacenter = explode( '-', $apiKey );
+				$submit_url = "https://" . $datacenter[1] . ".api.mailchimp.com/3.0/lists/" . $listId . "/members/" ;
+
+				$data = array(
+					'email_address' => $subscribe_email,
+					'status' => 'subscribed'
+				);
+
+				if( !empty( $merge_vars ) ) { $data['merge_fields'] = $merge_vars; }
+
+				$payload = json_encode($data);
+
+				$auth = base64_encode( 'user:' . $apiKey );
+
+				$header   = array();
+				$header[] = 'Content-type: application/json; charset=utf-8';
+				$header[] = 'Authorization: Basic ' . $auth;
+
+				$ch = curl_init();
+				curl_setopt($ch, CURLOPT_URL, $submit_url);
+				curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+				curl_setopt($ch, CURLOPT_POST, true);
+				curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+
+				$result = curl_exec($ch);
+				curl_close($ch);
+				$data = json_decode($result);
+
 				echo '{ "alert": "success", "message": "' . $message_success . '" }';
 			else:
 				echo '{ "alert": "error", "message": "Email <strong>could not</strong> be sent due to some Unexpected Error. Please Try Again later.<br /><br /><strong>Reason:</strong><br />' . $mail->ErrorInfo . '" }';

@@ -2,6 +2,9 @@
 
 require_once('phpmailer/PHPMailerAutoload.php');
 
+$apiKey = ''; // Your MailChimp API Key
+$listId = ''; // Your MailChimp List ID
+
 $toemails = array();
 
 $toemails[] = array(
@@ -23,12 +26,13 @@ $mail = new PHPMailer();
 if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 	if( $_POST['template-contactform-email'] != '' ) {
 
-		$name = isset( $_POST['template-contactform-name'] ) ? $_POST['template-contactform-name'] : '';
-		$email = isset( $_POST['template-contactform-email'] ) ? $_POST['template-contactform-email'] : '';
-		$phone = isset( $_POST['template-contactform-phone'] ) ? $_POST['template-contactform-phone'] : '';
-		$service = isset( $_POST['template-contactform-service'] ) ? $_POST['template-contactform-service'] : '';
-		$subject = isset( $_POST['template-contactform-subject'] ) ? $_POST['template-contactform-subject'] : '';
-		$message = isset( $_POST['template-contactform-message'] ) ? $_POST['template-contactform-message'] : '';
+		$name = $_POST['template-contactform-name'];
+		$email = $_POST['template-contactform-email'];
+		$subscribe_email = $email;
+		$phone = $_POST['template-contactform-phone'];
+		$service = $_POST['template-contactform-service'];
+		$subject = $_POST['template-contactform-subject'];
+		$message = $_POST['template-contactform-message'];
 
 		$subject = isset($subject) ? $subject : 'New Message From Contact Form';
 
@@ -76,18 +80,50 @@ if( $_SERVER['REQUEST_METHOD'] == 'POST' ) {
 			$sendEmail = $mail->Send();
 
 			if( $sendEmail == true ):
+
+				$datacenter = explode( '-', $apiKey );
+				$submit_url = "https://" . $datacenter[1] . ".api.mailchimp.com/3.0/lists/" . $listId . "/members/" ;
+
+				$data = array(
+					'email_address' => $subscribe_email,
+					'status' => 'subscribed'
+				);
+
+				if( !empty( $merge_vars ) ) { $data['merge_fields'] = $merge_vars; }
+
+				$payload = json_encode($data);
+
+				$auth = base64_encode( 'user:' . $apiKey );
+
+				$header   = array();
+				$header[] = 'Content-type: application/json; charset=utf-8';
+				$header[] = 'Authorization: Basic ' . $auth;
+
+				$ch = curl_init();
+				curl_setopt($ch, CURLOPT_URL, $submit_url);
+				curl_setopt($ch, CURLOPT_HTTPHEADER, $header);
+				curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+				curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+				curl_setopt($ch, CURLOPT_POST, true);
+				curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+				curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+
+				$result = curl_exec($ch);
+				curl_close($ch);
+				$data = json_decode($result);
+
 				echo '{ "alert": "success", "message": "' . $message_success . '" }';
 			else:
-				echo '{ "alert": "error", "message": "Email <strong>could not</strong> be sent due to some Unexpected Error. Please Try Again later.<br /><br /><strong>Reason:</strong><br />' . $mail->ErrorInfo . '" }';
+				echo 'Email <strong>could not</strong> be sent due to some Unexpected Error. Please Try Again later.<br /><br /><strong>Reason:</strong><br />' . $mail->ErrorInfo . '';
 			endif;
 		} else {
 			echo '{ "alert": "error", "message": "Bot <strong>Detected</strong>.! Clean yourself Botster.!" }';
 		}
 	} else {
-		echo '{ "alert": "error", "message": "Please <strong>Fill up</strong> all the Fields and Try Again." }';
+		echo 'Please <strong>Fill up</strong> all the Fields and Try Again.';
 	}
 } else {
-	echo '{ "alert": "error", "message": "An <strong>unexpected error</strong> occured. Please Try Again later." }';
+	echo 'An <strong>unexpected error</strong> occured. Please Try Again later.';
 }
 
 ?>
